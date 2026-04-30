@@ -1,0 +1,38 @@
+using Hangfire;
+using Hangfire.Dashboard;
+using Microsoft.AspNetCore.Builder;
+using YT.Generate.Cuts.Application.Abstractions;
+using YT.Generate.Cuts.Application.VideoExtraction;
+using YT.Generate.Cuts.Infra.Data;
+using YT.Generate.Cuts.Worker.VideoExtraction;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddApplicationVideoExtraction();
+builder.Services.AddInfrastructureData(builder.Configuration);
+builder.Services.AddHangfire(builder.Configuration);
+builder.Services.AddServices();
+
+
+var app = builder.Build();
+
+app.ApplyMigrations();
+
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new AllowAllConnectionsFilter() }
+});
+
+app.UseHangfireDashboard();
+
+using (var scope = app.Services.CreateScope())
+{
+    scope.ServiceProvider.AddServicesHangfire();
+}
+
+app.Run();
+
+public class AllowAllConnectionsFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context) => true;
+}

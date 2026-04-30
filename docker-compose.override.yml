@@ -1,0 +1,28 @@
+services:
+  yt.generate.cuts.worker.videoextraction:
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=monitoring;Username=postgres;Password=123
+      - DownloadPath=/app/downloads
+      - MaxResolution=720 
+    ports:
+      - "8383:8080" 
+    volumes:
+      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      - ./downloads:/app/downloads
+    depends_on:
+      - db
+
+  db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_DB=monitoring
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123
+    ports:
+      - "5445:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+volumes:
+  postgres_data:

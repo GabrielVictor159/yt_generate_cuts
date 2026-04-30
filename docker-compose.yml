@@ -1,0 +1,6 @@
+services:
+  yt.generate.cuts.worker.videoextraction:
+    image: ${DOCKER_REGISTRY-}ytgeneratecutsworkervideoextraction
+    build:
+      context: .
+      dockerfile: YT.Generate.Cuts.Worker.VideoExtraction/Dockerfile

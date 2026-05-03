@@ -12,7 +12,7 @@ using YT.Generate.Cuts.Infra.Data.Context;
 namespace YT.Generate.Cuts.Infra.Data.Migrations
 {
     [DbContext(typeof(CutContext))]
-    [Migration("20260430042440_InitialMigration")]
+    [Migration("20260503013641_InitialMigration")]
     partial class InitialMigration
     {
         /// <inheritdoc />
@@ -144,6 +144,9 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("TypePublish")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.ToTable("publishChannels");
@@ -162,6 +165,15 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
 
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<TimeSpan?>("Duration")
+                        .HasColumnType("interval");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.Property<string>("SubtitlePath")
                         .HasColumnType("text");

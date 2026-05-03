@@ -31,15 +31,16 @@ public class DownloadVideoCommandHandler : ICommandHandler<DownloadVideoCommand,
                 Directory.CreateDirectory(command.saveDirectory);
 
             var youtube = new YoutubeClient();
-            var videoId = command.videoUri;
-
             var fileGuid = Guid.NewGuid();
             var videoPath = Path.Combine(command.saveDirectory, $"video_{fileGuid}.mp4");
             var subtitlePath = Path.Combine(command.saveDirectory, $"subs_{fileGuid}.srt");
 
-            await DownloadSubtitlesAsync(youtube, command.videoUri, subtitlePath, ct);
+            var videoInfo = await youtube.Videos.GetAsync(command.videoUri, ct);
+            var videoDuration = videoInfo.Duration ?? TimeSpan.Zero;
 
-            var streamManifest = await youtube.Videos.Streams.GetManifestAsync(command.videoUri);
+            string subtitleLanguage = await DownloadSubtitlesAsync(youtube, command.videoUri, subtitlePath, ct);
+
+            var streamManifest = await youtube.Videos.Streams.GetManifestAsync(command.videoUri, ct);
 
             if (!int.TryParse(_configuration["MaxResolution"], out int maxResolution))
             {
@@ -71,8 +72,10 @@ public class DownloadVideoCommandHandler : ICommandHandler<DownloadVideoCommand,
                 cancellationToken: ct
             );
 
-            _logger.LogInformation("Download concluído! Video: {VPath} | Legenda: {SPath}", videoPath, subtitlePath);
-            return new DownloadVideoCommandResponse(videoPath,subtitlePath);
+            _logger.LogInformation("Download concluído! Video: {VPath} | Legenda: {SPath} | Idioma: {Lang} | Duração: {Dur}",
+                videoPath, subtitlePath, subtitleLanguage, videoDuration);
+
+            return new DownloadVideoCommandResponse(videoPath, subtitlePath, subtitleLanguage, videoDuration);
         }
         catch (Exception ex)
         {
@@ -81,7 +84,7 @@ public class DownloadVideoCommandHandler : ICommandHandler<DownloadVideoCommand,
         }
     }
 
-    private async Task DownloadSubtitlesAsync(YoutubeClient youtube, string videoUri, string savePath, CancellationToken ct)
+    private async Task<string> DownloadSubtitlesAsync(YoutubeClient youtube, string videoUri, string savePath, CancellationToken ct)
     {
         try
         {
@@ -93,21 +96,25 @@ public class DownloadVideoCommandHandler : ICommandHandler<DownloadVideoCommand,
 
             if (trackInfo != null)
             {
-                _logger.LogInformation("Baixando legenda automática: {lang}", trackInfo.Language.Name);
+                _logger.LogInformation("Baixando legenda: {lang}", trackInfo.Language.Name);
                 await youtube.Videos.ClosedCaptions.DownloadAsync(
                     trackInfo: trackInfo,
                     filePath: savePath,
                     cancellationToken: ct
                 );
+
+                return trackInfo.Language.Code;
             }
             else
             {
-                _logger.LogWarning("Nenhuma legenda automática disponível para este vídeo.");
+                _logger.LogWarning("Nenhuma legenda disponível para este vídeo.");
+                return string.Empty;
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Não foi possível extrair legendas.");
+            return string.Empty;
         }
     }
 }

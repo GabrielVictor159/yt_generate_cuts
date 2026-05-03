@@ -24,23 +24,24 @@ public static class DependencyInjectionExtension
         return services;
     }
 
-    public static IServiceCollection AddHangfire(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddHangfire(this IServiceCollection services, IConfiguration configuration, string[] filas, string schema)
     {
         services.AddHangfire(config => config
-        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-        .UseSimpleAssemblyNameTypeSerializer()
-        .UseRecommendedSerializerSettings()
-        .UsePostgreSqlStorage(options =>
-        {
-            options.UseNpgsqlConnection(configuration.GetConnectionString("DefaultConnection"));
-        }, new PostgreSqlStorageOptions
-        {
-            PrepareSchemaIfNecessary = true,
-            SchemaName = "hangfire"
-        }));
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UsePostgreSqlStorage(options =>
+            {
+                options.UseNpgsqlConnection(configuration.GetConnectionString("DefaultConnection"));
+            }, new PostgreSqlStorageOptions
+            {
+                PrepareSchemaIfNecessary = true,
+                SchemaName = schema 
+            }));
 
         services.AddHangfireServer(options =>
         {
+            options.Queues = filas;
             options.WorkerCount = 10;
         });
 
@@ -78,5 +79,15 @@ public static class DependencyInjectionExtension
                 Thread.Sleep(delayPerRetryInSeconds * 1000);
             }
         }
+    }
+
+    public static void ClearSpecificHangfireJobs(this IServiceProvider serviceProvider, string recurringJobId)
+    {
+        try
+        {
+            var manager = serviceProvider.GetRequiredService<IRecurringJobManager>();
+            manager.RemoveIfExists(recurringJobId);
+        }
+        catch { }
     }
 }

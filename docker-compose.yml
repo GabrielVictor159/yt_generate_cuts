@@ -4,3 +4,29 @@ services:
     build:
       context: .
       dockerfile: YT.Generate.Cuts.Worker.VideoExtraction/Dockerfile
+
+  yt.generate.cuts.worker.videoprocessing:
+    image: ${DOCKER_REGISTRY-}ytgeneratecutsworkervideoprocessing
+    build:
+      context: .
+      dockerfile: YT.Generate.Cuts.Worker.VideoProcessing/Dockerfile
+
+
+  yt.generate.cuts.api:
+    image: ${DOCKER_REGISTRY-}ytgeneratecutsapi
+    build:
+      context: .
+      dockerfile: YT.Generate.Cuts.Api/Dockerfile
+
+  yt.generate.cuts.app.webassembly:
+     image: ${DOCKER_REGISTRY-}ytgeneratecutsappwebassembly
+     build:
+      context: .
+      dockerfile: YT.Generate.Cuts.App.WebAssembly/Dockerfile
+
+  yt.generate.cuts.worker.videopublish:
+    image: ${DOCKER_REGISTRY-}ytgeneratecutsworkervideopublish
+    build:
+      context: .
+      dockerfile: YT.Generate.Cuts.Worker.VideoPublish/Dockerfile
+

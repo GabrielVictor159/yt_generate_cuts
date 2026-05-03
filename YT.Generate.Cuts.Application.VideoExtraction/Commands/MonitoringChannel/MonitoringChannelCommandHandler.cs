@@ -70,7 +70,8 @@ public class MonitoringChannelCommandHandler : ICommandHandler<MonitoringChannel
                     {
                         Title = video.Title,
                         Url = video.Url,
-                        ChannelId = command.Channel.Id
+                        ChannelId = command.Channel.Id,
+                        Status = Domain.Enums.VideoStatusEnum.Created
                     };
 
                     await _uow.Repository<Domain.Entities.Video>().AddAsync(newVideo);
@@ -95,6 +96,9 @@ public class MonitoringChannelCommandHandler : ICommandHandler<MonitoringChannel
 
                         newVideo.VideoPath = responseDownload.videoPath;
                         newVideo.SubtitlePath = responseDownload.subtitlePath;
+                        newVideo.Status = Domain.Enums.VideoStatusEnum.Download;
+                        newVideo.Language = responseDownload.language;
+                        newVideo.Duration = responseDownload.duration;
 
                         await _uow.CommitAsync();
                         await _uow.CommitTransactionAsync();

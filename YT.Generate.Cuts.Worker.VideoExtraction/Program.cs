@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplicationVideoExtraction();
 builder.Services.AddInfrastructureData(builder.Configuration);
-builder.Services.AddHangfire(builder.Configuration);
+builder.Services.AddHangfire(builder.Configuration, ["extraction"], "extraction_jobs");
 builder.Services.AddServices();
 
 

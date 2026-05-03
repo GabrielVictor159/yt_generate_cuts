@@ -2,7 +2,7 @@
 public class Monitoring
 {
     public long Id { get; set; }
-    public DateTime CreationDate { get; set; }
+    public DateTime CreationDate { get; set; } = DateTime.UtcNow;
 
     #region Foreign Keys
     public long MonitoringChannelId { get; set; }

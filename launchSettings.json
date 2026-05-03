@@ -4,7 +4,10 @@
       "commandName": "DockerCompose",
       "commandVersion": "1.0",
       "serviceActions": {
-        "yt.generate.cuts.worker.videoextraction": "StartDebugging"
+        "yt.generate.cuts.worker.videoextraction": "StartDebugging",
+        "yt.generate.cuts.worker.videoprocessing": "StartDebugging",
+        "yt.generate.cuts.api": "StartDebugging",
+        "yt.generate.cuts.worker.videopublish": "StartDebugging"
       }
     }
   }

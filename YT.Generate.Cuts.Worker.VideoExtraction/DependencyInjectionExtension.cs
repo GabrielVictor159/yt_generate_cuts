@@ -15,45 +15,18 @@ public static class DependencyInjectionExtension
     {
         var manager = services.GetRequiredService<IRecurringJobManager>();
 
-        services.ClearSpecificHangfireJobs<MonitoringChannelsService>("monitoring-channels");
+        try
+        {
+            Infra.Data.DependencyInjectionExtension.ClearSpecificHangfireJobs(services, "monitoring-channels");
 
-        manager.AddOrUpdate<MonitoringChannelsService>(
+            manager.AddOrUpdate<MonitoringChannelsService>(
             "monitoring-channels",
+            "extraction",
             s => s.MonitoringNewVideosAsync(CancellationToken.None),
             Cron.Minutely);
+        }
+        catch { }
 
         return services;
-    }
-
-    public static void ClearSpecificHangfireJobs<T>(this IServiceProvider serviceProvider, string recurringJobId)
-    {
-        var monitor = JobStorage.Current.GetMonitoringApi();
-        var backgroundJobClient = serviceProvider.GetRequiredService<IBackgroundJobClient>();
-
-        var targetType = typeof(T);
-
-        var processing = monitor.ProcessingJobs(0, int.MaxValue)
-            .Where(x => x.Value?.Job?.Type == targetType);
-
-        var enqueued = monitor.EnqueuedJobs("default", 0, int.MaxValue)
-            .Where(x => x.Value?.Job?.Type == targetType);
-
-        var scheduled = monitor.ScheduledJobs(0, int.MaxValue)
-            .Where(x => x.Value?.Job?.Type == targetType);
-
-        var failed = monitor.FailedJobs(0, int.MaxValue)
-            .Where(x => x.Value?.Job?.Type == targetType);
-
-        foreach (var job in processing)
-            backgroundJobClient.Delete(job.Key);
-        foreach (var job in enqueued)
-            backgroundJobClient.Delete(job.Key);
-        foreach (var job in scheduled)
-            backgroundJobClient.Delete(job.Key);
-        foreach (var job in failed)
-            backgroundJobClient.Delete(job.Key);
-
-        var manager = serviceProvider.GetRequiredService<IRecurringJobManager>();
-        manager.RemoveIfExists(recurringJobId);
     }
 }

@@ -1,0 +1,6 @@
+@YT.Generate.Cuts.Api_HostAddress = http://localhost:5210
+
+GET {{YT.Generate.Cuts.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

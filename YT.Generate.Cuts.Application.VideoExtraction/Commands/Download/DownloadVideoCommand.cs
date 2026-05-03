@@ -3,4 +3,8 @@
 namespace YT.Generate.Cuts.Application.VideoExtraction.Commands.Download;
 public record DownloadVideoCommand(string videoUri, string saveDirectory) : ICommand<DownloadVideoCommandResponse>;
 
-public record DownloadVideoCommandResponse(string videoPath, string subtitlePath);
+public record DownloadVideoCommandResponse(
+    string videoPath,
+    string subtitlePath,
+    string language,
+    TimeSpan duration);

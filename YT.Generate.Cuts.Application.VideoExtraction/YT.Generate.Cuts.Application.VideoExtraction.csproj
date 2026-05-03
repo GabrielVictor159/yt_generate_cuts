@@ -17,8 +17,4 @@
     <ProjectReference Include="..\YT.Generate.Cuts.Infra.Data.Abstractions\YT.Generate.Cuts.Infra.Data.Abstractions.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Commands\InterestingTimes\" />
-  </ItemGroup>
-
 </Project>

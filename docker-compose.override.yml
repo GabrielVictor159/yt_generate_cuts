@@ -2,27 +2,135 @@ services:
   yt.generate.cuts.worker.videoextraction:
     environment:
       - DOTNET_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=monitoring;Username=postgres;Password=123
-      - DownloadPath=/app/downloads
       - MaxResolution=720 
+    env_file:
+      - common.env
     ports:
       - "8383:8080" 
+    networks: 
+      - yt_generate_cuts
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
       - ./downloads:/app/downloads
     depends_on:
       - db
 
+  yt.generate.cuts.worker.videoprocessing:
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+      - OllamaUrl=http://ollama:11434
+    env_file:
+      - common.env
+      - resources.env
+    ports:
+      - "8384:8080" 
+    networks: 
+      - yt_generate_cuts
+    volumes:
+      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
+      - ./downloads:/app/downloads
+    depends_on:
+      db:
+        condition: service_started
+      ollama:
+        condition: service_started
+      ollama-pull-model:
+        condition: service_completed_successfully
+
+  yt.generate.cuts.worker.videopublish:
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+    env_file:
+      - common.env
+    ports:
+      - "8385:8080" 
+    networks: 
+      - yt_generate_cuts
+    volumes:
+      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
+      - ./downloads:/app/downloads
+    depends_on:
+      - db
+
+  yt.generate.cuts.api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
+    env_file:
+      - common.env
+    networks: 
+      - yt_generate_cuts
+    ports:
+      - "8386:8080"
+    volumes:
+      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
+    depends_on:
+      - db
+
+  yt.generate.cuts.app.webassembly:
+    ports:
+      - "8387:8080"
+    networks:
+      - yt_generate_cuts
+    depends_on:
+      - yt.generate.cuts.api
+  
   db:
     image: postgres:latest
     environment:
       - POSTGRES_DB=monitoring
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=123
+    networks: 
+      - yt_generate_cuts
     ports:
       - "5445:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+  
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: ollama
+    env_file:
+      - resources.env
+    ports:
+      - "11434:11434"
+    networks:
+      - yt_generate_cuts
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: ${GPU_DRIVER}
+              count: 1
+              capabilities: [gpu]
+              
+  ollama-pull-model:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    container_name: ollama_puller
+    networks:
+      - yt_generate_cuts
+    volumes:
+      - ollama_data:/root/.ollama
+    env_file:
+      - resources.env
+    environment:
+      - OLLAMA_HOST=ollama
+    entrypoint: /bin/sh
+    command: -c "sleep 5 && ollama pull $$OLLAMA_MODEL"
+    depends_on:
+      - ollama
 
 volumes:
   postgres_data:
+  ollama_data:
+
+networks:
+  yt_generate_cuts:
+
+

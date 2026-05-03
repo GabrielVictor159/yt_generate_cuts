@@ -36,7 +36,8 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                     Name = table.Column<string>(type: "text", nullable: false),
                     Login = table.Column<string>(type: "text", nullable: false),
                     Password = table.Column<string>(type: "text", nullable: false),
-                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    TypePublish = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -54,6 +55,9 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                     VideoPath = table.Column<string>(type: "text", nullable: true),
                     SubtitlePath = table.Column<string>(type: "text", nullable: true),
                     CreationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    Language = table.Column<string>(type: "text", nullable: true),
+                    Duration = table.Column<TimeSpan>(type: "interval", nullable: true),
                     ChannelId = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>

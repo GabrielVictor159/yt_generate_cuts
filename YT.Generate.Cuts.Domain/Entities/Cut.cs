@@ -10,7 +10,7 @@ public class Cut
     public required TimeOnly InitialTime { get; set; }
     public required TimeOnly FinallyTime { get; set; }
     public required string CutPath { get; set; }
-    public DateTime CreationDate { get; set; }
+    public DateTime CreationDate { get; set; } = DateTime.UtcNow;
     public required CutStatusEnum Status { get; set; } 
     #region Foreign Keys
     public long? VideoId { get; set; }

@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OllamaSharp" Version="5.4.25" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\YT.Generate.Cuts.Application.Abstractions\YT.Generate.Cuts.Application.Abstractions.csproj" />
+		<ProjectReference Include="..\YT.Generate.Cuts.Domain\YT.Generate.Cuts.Domain.csproj" />
+		<ProjectReference Include="..\YT.Generate.Cuts.Infra.Data.Abstractions\YT.Generate.Cuts.Infra.Data.Abstractions.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="Resources\Prompts.Designer.cs">
+	    <DesignTime>True</DesignTime>
+	    <AutoGen>True</AutoGen>
+	    <DependentUpon>Prompts.resx</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Update="Resources\Prompts.resx">
+	    <Generator>PublicResXFileCodeGenerator</Generator>
+	    <LastGenOutput>Prompts.Designer.cs</LastGenOutput>
+	  </EmbeddedResource>
+	</ItemGroup>
+	
+</Project>

@@ -4,7 +4,7 @@ public class MonitoringChannel
     public long Id { get; set; }
     public required string Name { get; set; }
     public required string Url { get; set; }
-    public DateTime CreationDate { get; set; }
+    public DateTime CreationDate { get; set; } = DateTime.UtcNow;
 
     #region Foreign Keys
     public virtual List<Video> Videos { get; set; } = new();

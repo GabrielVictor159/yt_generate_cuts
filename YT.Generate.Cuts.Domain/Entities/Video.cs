@@ -1,4 +1,6 @@
-﻿namespace YT.Generate.Cuts.Domain.Entities;
+﻿using YT.Generate.Cuts.Domain.Enums;
+
+namespace YT.Generate.Cuts.Domain.Entities;
 public class Video
 {
     public long Id { get; set; }
@@ -6,7 +8,10 @@ public class Video
     public required string Url { get; set; }
     public string? VideoPath { get; set; }
     public string? SubtitlePath { get; set; }
-    public DateTime CreationDate { get; set; }
+    public DateTime CreationDate { get; set; } = DateTime.UtcNow;
+    public required VideoStatusEnum Status { get; set; }
+    public string? Language { get; set; }
+    public TimeSpan? Duration { get; set; }
 
     #region Foreign Keys
     public required long ChannelId { get; set; }

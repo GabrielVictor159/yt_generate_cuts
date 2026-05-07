@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - ../common.env
+      - ../resources.env
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    networks:
+      - yt_generate_cuts
+  
+  db:
+    extends:
+      file: ../docker-compose.override.yml
+      service: db
+
+  ollama:
+    extends:
+      file: ../docker-compose.override.yml
+      service: ollama
+
+  ollama-pull-model:
+    extends:
+      file: ../docker-compose.override.yml
+      service: ollama-pull-model
+
+volumes:
+  postgres_data:
+  ollama_data:
+
+networks:
+  yt_generate_cuts:

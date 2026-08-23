@@ -1,0 +1,250 @@
+@page "/publish"
+@using MudBlazor
+@using YT.Generate.Cuts.App.WebAssembly.Services
+@using YT.Generate.Cuts.Domain.Entities
+@using YT.Generate.Cuts.Domain.Enums
+@inject ApiService Api
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Canais de Publicação</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">📤 Canais de Publicação</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">Canais onde os cortes serão publicados (TikTok, YouTube, etc.)</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+           OnClick="StartAdd" Disabled="isLoading" Class="mb-4">
+    Novo Canal
+</MudButton>
+
+@if (isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    <MudText Align="Align.Center">Carregando...</MudText>
+}
+else
+{
+    <MudTable Items="channels" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm" Elevation="2" Class="rounded-lg">
+        <HeaderContent>
+            <MudTh>ID</MudTh>
+            <MudTh>Nome</MudTh>
+            <MudTh>Login</MudTh>
+            <MudTh>Tipo</MudTh>
+            <MudTh>Criado em</MudTh>
+            <MudTh Style="text-align: right;">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="ID">@context.Id</MudTd>
+            <MudTd DataLabel="Nome">@context.Name</MudTd>
+            <MudTd DataLabel="Login">@context.Login</MudTd>
+            <MudTd DataLabel="Tipo">
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Label="true">@context.TypePublish</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Criado em">@context.CreationDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Ações" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small"
+                               OnClick="() => StartEdit(context)" Disabled="isBusy" title="Editar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                               OnClick="() => Delete(context.Id)" Disabled="isBusy" title="Excluir" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center" Class="pa-4">Nenhum canal de publicação cadastrado.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4" ShowCloseIcon="true" CloseIconClicked="() => error = string.Empty">@error</MudAlert>
+}
+
+<MudDialog @bind-Visible="showModal" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(editingId > 0 ? "Editar Canal de Publicação" : "Novo Canal de Publicação")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" Spacing="3">
+            <MudTextField @bind-Value="editName"
+                          Label="Nome"
+                          Required="true"
+                          RequiredError="Nome é obrigatório"
+                          Immediate="true"
+                          Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="editLogin"
+                          Label="Login / Email"
+                          Required="true"
+                          RequiredError="Login é obrigatório"
+                          Immediate="true"
+                          Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="editPassword"
+                          Label="@(editingId > 0 ? "Nova senha (deixe em branco para manter)" : "Senha")"
+                          InputType="InputType.Password"
+                          Required="@(editingId == 0)"
+                          RequiredError="Senha é obrigatória"
+                          Immediate="true"
+                          Variant="Variant.Outlined" />
+            <MudSelect T="TypePublishEnum" @bind-Value="editType" Label="Tipo" Required="true"
+                       RequiredError="Tipo é obrigatório" Variant="Variant.Outlined">
+                @foreach (var type in publishTypes)
+                {
+                    <MudSelectItem T="TypePublishEnum" Value="@type">@type</MudSelectItem>
+                }
+            </MudSelect>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseModal" Variant="Variant.Text" Disabled="isSaving">Cancelar</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="isSaving">
+            @if (isSaving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Salvando...</span>
+            }
+            else
+            {
+                <span>Salvar</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    // Vem do enum do domínio: adicionar um novo destino no TypePublishEnum
+    // passa a aparecer aqui sem mexer na tela.
+    private static readonly TypePublishEnum[] publishTypes = Enum.GetValues<TypePublishEnum>();
+
+    private List<PublishChannel> channels = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isDeleting;
+    private bool showModal;
+    private long editingId;
+    private string editName = "";
+    private string editLogin = "";
+    private string editPassword = "";
+    private TypePublishEnum editType = publishTypes.First();
+    private string error = "";
+    private MudForm? form;
+
+    private bool isBusy => isSaving || isDeleting;
+
+    private readonly DialogOptions dialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            isLoading = true;
+            error = "";
+            channels = await Api.GetPublishChannelsAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erro ao carregar os canais: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void StartAdd()
+    {
+        editingId = 0;
+        editName = "";
+        editLogin = "";
+        editPassword = "";
+        editType = publishTypes.First();
+        error = "";
+        showModal = true;
+    }
+
+    private void StartEdit(PublishChannel channel)
+    {
+        editingId = channel.Id;
+        editName = channel.Name;
+        editLogin = channel.Login;
+        // A API não devolve a senha; em branco significa "manter a atual".
+        editPassword = "";
+        editType = channel.TypePublish;
+        error = "";
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private async Task Save()
+    {
+        if (isSaving) return;
+
+        if (form is not null)
+        {
+            await form.Validate();
+            if (!form.IsValid) return;
+        }
+
+        var name = editName.Trim();
+        var login = editLogin.Trim();
+
+        try
+        {
+            isSaving = true;
+            error = "";
+
+            if (editingId > 0)
+            {
+                await Api.UpdatePublishChannelAsync(
+                    editingId,
+                    name,
+                    login,
+                    string.IsNullOrEmpty(editPassword) ? null : editPassword,
+                    editType);
+                Snackbar.Add("Canal de publicação atualizado com sucesso!", Severity.Success);
+            }
+            else
+            {
+                await Api.CreatePublishChannelAsync(name, login, editPassword, editType);
+                Snackbar.Add("Canal de publicação criado com sucesso!", Severity.Success);
+            }
+
+            showModal = false;
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erro ao salvar: {ex.Message}";
+            Snackbar.Add(error, Severity.Error);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task Delete(long id)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este canal?");
+        if (!confirmed) return;
+
+        try
+        {
+            isDeleting = true;
+            error = "";
+            await Api.DeletePublishChannelAsync(id);
+            Snackbar.Add("Canal excluído com sucesso!", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erro ao excluir: {ex.Message}";
+            Snackbar.Add(error, Severity.Error);
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+}

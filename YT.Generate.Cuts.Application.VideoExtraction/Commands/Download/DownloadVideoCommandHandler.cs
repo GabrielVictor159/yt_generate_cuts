@@ -1,120 +1,74 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using YoutubeExplode;
-using YoutubeExplode.Converter;
-using YoutubeExplode.Videos.Streams;
 using YT.Generate.Cuts.Application.Abstractions.Interfaces.Commands;
+using YT.Generate.Cuts.Application.Abstractions.Interfaces.VideoSource;
 
 namespace YT.Generate.Cuts.Application.VideoExtraction.Commands.Download;
 
+/// <summary>
+/// Orquestra o download. Não conhece provedor: fala apenas com
+/// <see cref="IVideoDownloader"/>, que pode ser yt-dlp, YoutubeExplode ou a
+/// cadeia de fallback entre os dois.
+/// </summary>
 public class DownloadVideoCommandHandler : ICommandHandler<DownloadVideoCommand, DownloadVideoCommandResponse>
 {
+    private const int DefaultMaxResolution = 720;
+
     private readonly ILogger<DownloadVideoCommandHandler> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IVideoDownloader _downloader;
 
     public DownloadVideoCommandHandler(
         ILogger<DownloadVideoCommandHandler> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IVideoDownloader downloader)
     {
         _logger = logger;
         _configuration = configuration;
+        _downloader = downloader;
     }
 
     public async Task<DownloadVideoCommandResponse> Handle(DownloadVideoCommand command, CancellationToken ct)
     {
-        _logger.LogInformation("Iniciando download do video e legendas: {videoUri}", command.videoUri);
-        try
-        {
-            var ffmpegPath = _configuration["FFmpegSettings:BinaryPath"] ?? "ffmpeg";
+        _logger.LogInformation("Iniciando download do video e legendas: {videoUri} (provedor: {Provider})",
+            command.videoUri, _downloader.ProviderName);
 
-            if (!Directory.Exists(command.saveDirectory))
-                Directory.CreateDirectory(command.saveDirectory);
+        if (!int.TryParse(_configuration["MaxResolution"], out var maxResolution) || maxResolution <= 0)
+            maxResolution = DefaultMaxResolution;
 
-            var youtube = new YoutubeClient();
-            var fileGuid = Guid.NewGuid();
-            var videoPath = Path.Combine(command.saveDirectory, $"video_{fileGuid}.mp4");
-            var subtitlePath = Path.Combine(command.saveDirectory, $"subs_{fileGuid}.srt");
+        var request = new VideoDownloadRequest(
+            VideoUrl: command.videoUri,
+            TargetDirectory: command.saveDirectory,
+            MaxHeight: maxResolution,
+            PreferredSubtitleLanguages: ReadSubtitleLanguages());
 
-            var videoInfo = await youtube.Videos.GetAsync(command.videoUri, ct);
-            var videoDuration = videoInfo.Duration ?? TimeSpan.Zero;
+        var result = await _downloader.DownloadAsync(request, ct);
 
-            string subtitleLanguage = await DownloadSubtitlesAsync(youtube, command.videoUri, subtitlePath, ct);
+        _logger.LogInformation("Download concluído! Video: {VPath} | Legenda: {SPath} | Idioma: {Lang} | Duração: {Dur}",
+            result.VideoPath, result.SubtitlePath ?? "(sem legenda)", result.SubtitleLanguage ?? "-", result.Duration);
 
-            var streamManifest = await youtube.Videos.Streams.GetManifestAsync(command.videoUri, ct);
-
-            if (!int.TryParse(_configuration["MaxResolution"], out int maxResolution))
-            {
-                maxResolution = 720;
-            }
-
-            var videoStreamInfo = streamManifest
-                .GetVideoOnlyStreams()
-                .Where(s => s.VideoResolution.Height <= maxResolution)
-                .GetWithHighestVideoQuality();
-
-            var audioStreamInfo = streamManifest
-                .GetAudioOnlyStreams()
-                .GetWithHighestBitrate();
-
-            var streamInfos = new IStreamInfo[] { audioStreamInfo, videoStreamInfo };
-
-            var conversionRequest = new ConversionRequest(
-                ffmpegCliFilePath: ffmpegPath,
-                outputFilePath: videoPath,
-                container: new Container("mp4"),
-                preset: ConversionPreset.VeryFast,
-                environmentVariables: new Dictionary<string, string?>()
-            );
-
-            await youtube.Videos.DownloadAsync(
-                streamInfos: streamInfos,
-                conversionRequest,
-                cancellationToken: ct
-            );
-
-            _logger.LogInformation("Download concluído! Video: {VPath} | Legenda: {SPath} | Idioma: {Lang} | Duração: {Dur}",
-                videoPath, subtitlePath, subtitleLanguage, videoDuration);
-
-            return new DownloadVideoCommandResponse(videoPath, subtitlePath, subtitleLanguage, videoDuration);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Falha crítica no processamento do vídeo: {videoUri}", command.videoUri);
-            throw;
-        }
+        return new DownloadVideoCommandResponse(
+            result.VideoPath,
+            result.SubtitlePath ?? string.Empty,
+            result.SubtitleLanguage ?? string.Empty,
+            result.Duration);
     }
 
-    private async Task<string> DownloadSubtitlesAsync(YoutubeClient youtube, string videoUri, string savePath, CancellationToken ct)
+    /// <summary>
+    /// Idiomas de legenda em ordem de preferência, de
+    /// <c>Subtitles__PreferredLanguages</c> (ex.: <c>pt,en,es</c>).
+    /// </summary>
+    private IReadOnlyList<string> ReadSubtitleLanguages()
     {
-        try
-        {
-            var trackManifest = await youtube.Videos.ClosedCaptions.GetManifestAsync(videoUri, ct);
+        var configured = _configuration["Subtitles:PreferredLanguages"];
 
-            var trackInfo = trackManifest.TryGetByLanguage("pt") ??
-                            trackManifest.TryGetByLanguage("en") ??
-                            trackManifest.Tracks.FirstOrDefault(t => t.IsAutoGenerated);
+        if (string.IsNullOrWhiteSpace(configured))
+            return new[] { "pt", "en" };
 
-            if (trackInfo != null)
-            {
-                _logger.LogInformation("Baixando legenda: {lang}", trackInfo.Language.Name);
-                await youtube.Videos.ClosedCaptions.DownloadAsync(
-                    trackInfo: trackInfo,
-                    filePath: savePath,
-                    cancellationToken: ct
-                );
+        var languages = configured
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
 
-                return trackInfo.Language.Code;
-            }
-            else
-            {
-                _logger.LogWarning("Nenhuma legenda disponível para este vídeo.");
-                return string.Empty;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Não foi possível extrair legendas.");
-            return string.Empty;
-        }
+        return languages.Length > 0 ? languages : new[] { "pt", "en" };
     }
 }

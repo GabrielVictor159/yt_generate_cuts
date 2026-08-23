@@ -1,0 +1,225 @@
+﻿@page "/edition-profiles"
+@using YT.Generate.Cuts.App.WebAssembly.Services
+@using YT.Generate.Cuts.Domain.Entities
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Perfis de Edição</PageTitle>
+
+<div class="d-flex align-center justify-space-between mb-2">
+    <MudText Typo="Typo.h4">🖼️ Perfis de Edição</MudText>
+    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
+               OnClick="StartCreate" Disabled="isBusy">Novo perfil</MudButton>
+</div>
+<MudText Typo="Typo.body2" Class="mb-4">
+    Resolução de saída e legenda embutida. Um perfil pode ser usado por vários canais monitorados;
+    canal sem perfil usa o padrão global da configuração.
+</MudText>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => error = string.Empty">@error</MudAlert>
+}
+
+<MudTable Items="profiles" Dense="true" Hover="true" Striped="true" Loading="isLoading" Elevation="2" Class="rounded-lg">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Nome</MudTh>
+        <MudTh>Resolução</MudTh>
+        <MudTh>Proporção</MudTh>
+        <MudTh>Legenda embutida</MudTh>
+        <MudTh Style="text-align: right;">Ações</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="ID">@context.Id</MudTd>
+        <MudTd DataLabel="Nome">@context.Name</MudTd>
+        <MudTd DataLabel="Resolução">@context.Width×@context.Height</MudTd>
+        <MudTd DataLabel="Proporção">@Aspect(context)</MudTd>
+        <MudTd DataLabel="Legenda embutida">
+            <MudChip T="string" Size="Size.Small" Label="true"
+                     Color="@(context.BurnSubtitles ? Color.Success : Color.Default)">
+                @(context.BurnSubtitles ? "Sim" : "Não")
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Ações" Style="text-align: right;">
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small"
+                           OnClick="() => StartEdit(context)" Disabled="isBusy" title="Editar" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                           OnClick="() => Delete(context)" Disabled="isBusy" title="Remover" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Align="Align.Center" Class="pa-4">
+            Nenhum perfil cadastrado. Sem perfil, os canais usam o padrão global.
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+<MudDialog @bind-Visible="isModalOpen" Options="new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(editingId is null ? "Novo perfil" : $"Editar perfil #{editingId}")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField T="string" @bind-Value="editName" Label="Nome" Required="true"
+                      RequiredError="O nome é obrigatório" Variant="Variant.Outlined" Immediate="true" />
+
+        <div class="d-flex gap-2 mt-2">
+            <MudNumericField T="int" @bind-Value="editWidth" Label="Largura" Min="128" Max="3840" Step="2"
+                             Variant="Variant.Outlined" Immediate="true" />
+            <MudNumericField T="int" @bind-Value="editHeight" Label="Altura" Min="128" Max="3840" Step="2"
+                             Variant="Variant.Outlined" Immediate="true" />
+        </div>
+
+        <MudText Typo="Typo.caption" Class="mt-1">
+            @DimensionHelper
+        </MudText>
+
+        <div class="d-flex gap-2 mt-2">
+            @foreach (var preset in Presets)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                           OnClick="@(() => ApplyPreset(preset.W, preset.H))">@preset.Label</MudButton>
+            }
+        </div>
+
+        <MudDivider Class="my-3" />
+        <MudSwitch T="bool" @bind-Value="editBurnSubtitles" Color="Color.Primary"
+                   Label="Embutir a legenda no vídeo" />
+        <MudText Typo="Typo.caption">
+            Usa a legenda do corte, recortada da legenda do vídeo. Corte sem legenda é editado sem texto.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => isModalOpen = false" Variant="Variant.Text" Disabled="isSaving">Cancelar</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(isSaving || !IsValid)">
+            @(isSaving ? "Salvando..." : "Salvar")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly (string Label, int W, int H)[] Presets =
+    {
+        ("Vertical 9:16", 1080, 1920),
+        ("Quadrado 1:1", 1080, 1080),
+        ("Horizontal 16:9", 1920, 1080),
+    };
+
+    private List<EditionConfiguration> profiles = new();
+    private bool isLoading = true;
+    private bool isBusy;
+    private bool isSaving;
+    private bool isModalOpen;
+    private string error = "";
+
+    private long? editingId;
+    private string editName = "";
+    private int editWidth = 1080;
+    private int editHeight = 1920;
+    private bool editBurnSubtitles = true;
+
+    // O libx264 em yuv420p exige dimensões pares: barrar aqui evita descobrir
+    // isso só na primeira edição, depois de todo o trabalho do ffmpeg.
+    private bool IsValid =>
+        !string.IsNullOrWhiteSpace(editName) &&
+        editWidth is >= 128 and <= 3840 && editWidth % 2 == 0 &&
+        editHeight is >= 128 and <= 3840 && editHeight % 2 == 0;
+
+    private string DimensionHelper =>
+        editWidth % 2 != 0 || editHeight % 2 != 0
+            ? "Largura e altura precisam ser números pares."
+            : $"Proporção {Ratio(editWidth, editHeight)}.";
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            isLoading = true;
+            error = "";
+            profiles = await Api.GetEditionConfigurationsAsync();
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { isLoading = false; }
+    }
+
+    private void StartCreate()
+    {
+        editingId = null;
+        editName = "";
+        editWidth = 1080;
+        editHeight = 1920;
+        editBurnSubtitles = true;
+        isModalOpen = true;
+    }
+
+    private void StartEdit(EditionConfiguration profile)
+    {
+        editingId = profile.Id;
+        editName = profile.Name;
+        editWidth = profile.Width;
+        editHeight = profile.Height;
+        editBurnSubtitles = profile.BurnSubtitles;
+        isModalOpen = true;
+    }
+
+    private void ApplyPreset(int width, int height)
+    {
+        editWidth = width;
+        editHeight = height;
+    }
+
+    private async Task Save()
+    {
+        if (!IsValid) return;
+
+        try
+        {
+            isSaving = true;
+            error = "";
+
+            if (editingId is null)
+                await Api.CreateEditionConfigurationAsync(editName, editWidth, editHeight, editBurnSubtitles);
+            else
+                await Api.UpdateEditionConfigurationAsync(editingId.Value, editName, editWidth, editHeight, editBurnSubtitles);
+
+            isModalOpen = false;
+            Snackbar.Add("Perfil salvo.", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex) { error = ex.Message; Snackbar.Add(ex.Message, Severity.Error); }
+        finally { isSaving = false; }
+    }
+
+    private async Task Delete(EditionConfiguration profile)
+    {
+        try
+        {
+            isBusy = true;
+            error = "";
+            await Api.DeleteEditionConfigurationAsync(profile.Id);
+
+            // Os canais que usavam o perfil não são apagados: voltam ao padrão
+            // global (a chave estrangeira é SetNull).
+            Snackbar.Add($"Perfil '{profile.Name}' removido. Os canais que o usavam voltaram ao padrão global.",
+                Severity.Success);
+
+            await Load();
+        }
+        catch (Exception ex) { error = ex.Message; Snackbar.Add(ex.Message, Severity.Error); }
+        finally { isBusy = false; }
+    }
+
+    private static string Aspect(EditionConfiguration profile) => Ratio(profile.Width, profile.Height);
+
+    private static string Ratio(int width, int height)
+    {
+        if (width <= 0 || height <= 0) return "—";
+
+        var divisor = Gcd(width, height);
+        return $"{width / divisor}:{height / divisor}";
+    }
+
+    private static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);
+}

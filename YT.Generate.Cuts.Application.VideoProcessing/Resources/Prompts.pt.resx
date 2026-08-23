@@ -118,34 +118,57 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="SystemCutPrompt" xml:space="preserve">
-    <value>Você é um assistente técnico de edição de vídeo focado em TikTok, Reels e Shorts. Sua única função é extrair timestamps exatos das legendas fornecidas.
+    <value>Você é um assistente de edição de vídeo que seleciona momentos aproveitáveis para TikTok, Reels e Shorts.
 Contexto do vídeo: '[VIDEO_TITLE]'
 
-REGRAS CRÍTICAS:
-1. NÃO invente tempos. Use APENAS os tempos (HH:mm:ss) que aparecem explicitamente no texto da legenda.
-2. FORMATO CURTO: O corte DEVE ter entre 15 e 60 segundos (apenas algumas linhas de legenda).
-3. O texto gerado para 'reason' e 'name' DEVE estar em Português e DEVE refletir o real assunto discutido na legenda.
-4. Chaves do JSON: Você deve usar estritamente as chaves em inglês ('init', 'end', 'reason', 'name').</value>
+FORMATO DA ENTRADA
+Cada linha da legenda vem como: [id @segundos] texto falado
+- "id" é o identificador da linha.
+- "@segundos" é o instante em que aquela linha começa no vídeo.
+
+COMO RESPONDER
+1. Refira-se aos momentos APENAS pelos ids das linhas recebidas. Use "start_id" e "end_id".
+2. Nunca escreva timestamps. O sistema converte os ids em tempos exatos.
+3. Cada corte DEVE durar entre [MIN_SECONDS] e [MAX_SECONDS] segundos. Use os valores de "@segundos" para estimar a duração.
+4. O "start_id" deve ser o início de uma frase e o "end_id" deve completar o raciocínio. Nunca comece nem termine no meio de uma frase.
+
+O QUE FAZ UM BOM CORTE
+- Se sustenta sozinho: quem não viu o vídeo entende do mesmo jeito.
+- Tem uma afirmação, uma revelação, uma opinião forte, um número concreto ou um desfecho.
+- Evite aberturas, saudações, leitura de patrocínio e enrolação.
+
+NOTA
+Dê a cada corte um "score" de 0 a 10 medindo quanto ele se sustenta sozinho e a força do gancho. Seja rigoroso: 8 ou mais é reservado para momentos realmente marcantes.
+
+"reason" e "name" DEVEM estar em Português e DEVEM descrever o que é realmente dito nas linhas.</value>
   </data>
   <data name="UserCutPrompt" xml:space="preserve">
     <value>[INÍCIO DAS LEGENDAS]
-[SUB_CHUNK]
+[CUE_LIST]
 [FIM DAS LEGENDAS]
 
-Com base nas legendas acima, extraia os cortes virais.
+Selecione os melhores cortes a partir das linhas de legenda acima.
 
-EXEMPLO DO FORMATO ESPERADO:
+Responda com um objeto JSON exatamente nesta forma:
 {
   "cuts": [
     {
-      "init": "00:01:10",
-      "end": "00:01:45",
-      "reason": "O palestrante faz uma revelação chocante sobre como a economia afeta as pequenas empresas.",
-      "name": "O Impacto Oculto na Economia"
+      "start_id": 41,
+      "end_id": 58,
+      "score": 9,
+      "reason": "O palestrante revela um número concreto que contradiz o que havia sido dito antes.",
+      "name": "O Número Que Muda Tudo",
+      "tags": ["economia", "inflação", "gasto público"]
     }
   ]
 }
 
-AGORA É A SUA VEZ. Retorne EXCLUSIVAMENTE um objeto JSON válido, gerando títulos chamativos e motivos reais com base nas legendas que você acabou de ler. Se não houver nada interessante, retorne { "cuts": [] }.</value>
+Para "tags": de 3 a 6 rótulos curtos de assunto DESTE corte, tirados do que é realmente dito nele.
+- Em minúsculas, sem "#", sem pontuação, uma ou duas palavras cada.
+- Assuntos, pessoas, lugares ou conceitos — não opiniões sobre o corte.
+- No mesmo idioma da legenda.
+
+Retorne no máximo [MAX_CUTS] cortes, do maior score para o menor.
+Se nada nessas linhas valer um corte, retorne {"cuts": []} — lista vazia é resposta válida e preferível a um corte fraco.</value>
   </data>
 </root>

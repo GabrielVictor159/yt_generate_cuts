@@ -1,10 +1,25 @@
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 USER root
 
+ARG YTDLP_VERSION=latest
+
 RUN apt-get update && \
-    apt-get install -y ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg curl ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# O binário oficial vem do GitHub, e não do apt: a versão empacotada nas distros
+# fica meses atrás, e este é justamente o componente que precisa acompanhar as
+# mudanças do YouTube. O yt-dlp_linux é autocontido (traz o próprio Python).
+# Para fixar uma versão: --build-arg YTDLP_VERSION=2025.08.01
+RUN if [ "$YTDLP_VERSION" = "latest" ]; then \
+      URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux"; \
+    else \
+      URL="https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux"; \
+    fi && \
+    curl -fsSL -o /usr/local/bin/yt-dlp "$URL" && \
+    chmod a+rx /usr/local/bin/yt-dlp && \
+    /usr/local/bin/yt-dlp --version
 
 USER $APP_UID
 WORKDIR /app

@@ -7,3 +7,8 @@ public record GetAllVideo(
     Expression<Func<Domain.Entities.Video, bool>>? expression,
     params Expression<Func<Domain.Entities.Video, object>>[] includes)
     : ICommand<List<Domain.Entities.Video>>;
+
+public record GetAllCuts(
+    Expression<Func<Domain.Entities.Cut, bool>>? expression,
+    params Expression<Func<Domain.Entities.Cut, object>>[] includes)
+    : ICommand<List<Domain.Entities.Cut>>;

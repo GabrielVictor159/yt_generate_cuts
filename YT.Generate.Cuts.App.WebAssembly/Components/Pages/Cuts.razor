@@ -1,0 +1,264 @@
+﻿@page "/cuts"
+@using YT.Generate.Cuts.App.WebAssembly.Services
+@using YT.Generate.Cuts.Domain.Entities
+@using YT.Generate.Cuts.Domain.Enums
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Cortes</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">✂️ Cortes</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">Cortes identificados pela IA nos vídeos baixados</MudText>
+
+<div class="d-flex align-center gap-4 mb-4">
+    <MudSelect T="CutStatusEnum?" @bind-Value="statusFilter" Label="Filtrar por status"
+               AdornmentIcon="@Icons.Material.Filled.FilterList" Variant="Variant.Outlined"
+               Margin="Margin.Dense" Style="max-width: 340px;" @bind-Value:after="Load">
+        <MudSelectItem T="CutStatusEnum?" Value="@(null)">Todos os status</MudSelectItem>
+        <MudSelectItem T="CutStatusEnum?" Value="@CutStatusEnum.Created">Criado (aguardando processamento)</MudSelectItem>
+        <MudSelectItem T="CutStatusEnum?" Value="@CutStatusEnum.Process">Processado (aguardando edição)</MudSelectItem>
+        <MudSelectItem T="CutStatusEnum?" Value="@CutStatusEnum.Edit">Editado (pronto para publicar)</MudSelectItem>
+        <MudSelectItem T="CutStatusEnum?" Value="@CutStatusEnum.Publish">Publicado</MudSelectItem>
+    </MudSelect>
+
+    <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Text"
+               OnClick="Load" Disabled="isLoading">Atualizar</MudButton>
+</div>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => error = string.Empty">@error</MudAlert>
+}
+
+<MudTable Items="cuts" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm"
+          Loading="isLoading" Elevation="2" Class="rounded-lg">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Nome</MudTh>
+        <MudTh>Vídeo</MudTh>
+        <MudTh>Início</MudTh>
+        <MudTh>Duração</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Tags</MudTh>
+        <MudTh>Canal de publicação</MudTh>
+        <MudTh Style="text-align: right;">Ações</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="ID">@context.Id</MudTd>
+        <MudTd DataLabel="Nome">@context.Name</MudTd>
+        <MudTd DataLabel="Vídeo">
+            <MudText Typo="Typo.caption">@(context.Video?.Title ?? "—")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Início">@context.InitialTime.ToString("HH:mm:ss")</MudTd>
+        <MudTd DataLabel="Duração">@Duration(context)</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)" Label="true">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Tags">
+            @if (string.IsNullOrWhiteSpace(context.Tags))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption">@context.Tags</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Canal de publicação">
+            @* O canal é obrigatório para publicar e nada mais na interface o
+               definia, então a escolha fica aqui na própria linha. *@
+            <MudSelect T="long?" Value="context.PublishChannelId" Dense="true" Margin="Margin.Dense"
+                       Variant="Variant.Text" Style="min-width: 170px;" Placeholder="Não definido"
+                       Disabled="@(context.Status == CutStatusEnum.Publish)"
+                       ValueChanged="@(value => AssignChannel(context, value))">
+                @foreach (var channel in publishChannels)
+                {
+                    <MudSelectItem T="long?" Value="@channel.Id">@channel.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudTd>
+        <MudTd DataLabel="Ações" Style="text-align: right;">
+            @if (context.Status == CutStatusEnum.Created)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Success" Size="Size.Small"
+                               OnClick="() => ProcessCut(context)" Disabled="isBusy" title="Gerar o arquivo do corte" />
+            }
+            @if (context.Status == CutStatusEnum.Process)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.AspectRatio" Color="Color.Info" Size="Size.Small"
+                               OnClick="() => EditCut(context)" Disabled="isBusy"
+                               title="Editar (resolução e legenda)" />
+            }
+            @if (context.Status == CutStatusEnum.Edit)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Publish" Color="Color.Primary" Size="Size.Small"
+                               OnClick="() => PublishCut(context)" Disabled="isBusy" title="Publicar corte" />
+            }
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                           OnClick="() => DeleteCut(context)" Disabled="isBusy" title="Remover corte" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Align="Align.Center" Class="pa-4">
+            @(statusFilter is null
+                ? "Nenhum corte encontrado. Os cortes aparecem aqui depois que a etapa de InterestingTimes analisa um vídeo baixado."
+                : $"Nenhum corte com status {statusFilter}.")
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<Cut> cuts = new();
+    private List<PublishChannel> publishChannels = new();
+    private bool isLoading = true;
+    private bool isBusy;
+    private CutStatusEnum? statusFilter;
+    private string error = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPublishChannels();
+        await Load();
+    }
+
+    /// <summary>
+    /// Antes esta tela não consultava nada: montava a lista com
+    /// <c>cuts = new()</c> e um comentário dizendo que a API não expunha os
+    /// cortes. O endpoint <c>GET /api/Cuts</c> já existia — a tela é que nunca
+    /// foi ligada nele.
+    /// </summary>
+    private async Task Load()
+    {
+        try
+        {
+            isLoading = true;
+            error = "";
+            cuts = await Api.GetCutsAsync(statusFilter);
+        }
+        catch (ApiException ex)
+        {
+            error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            error = $"Não foi possível carregar os cortes: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadPublishChannels()
+    {
+        try
+        {
+            publishChannels = await Api.GetPublishChannelsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Falhar aqui não pode impedir a listagem dos cortes: sem os canais
+            // a tela apenas não oferece a escolha.
+            error = $"Os canais de publicação não foram carregados: {ex.Message}";
+        }
+    }
+
+    private async Task ProcessCut(Cut cut)
+    {
+        await Run(async () =>
+        {
+            await Api.ProcessCutAsync(cut.Id);
+            Snackbar.Add($"Corte '{cut.Name}' processado.", Severity.Success);
+        });
+    }
+
+    private async Task EditCut(Cut cut)
+    {
+        await Run(async () =>
+        {
+            await Api.EditCutAsync(cut.Id);
+            Snackbar.Add($"Corte '{cut.Name}' editado.", Severity.Success);
+        });
+    }
+
+    private async Task PublishCut(Cut cut)
+    {
+        if (cut.PublishChannelId is null)
+        {
+            Snackbar.Add("Defina o canal de publicação antes de publicar este corte.", Severity.Warning);
+            return;
+        }
+
+        await Run(async () =>
+        {
+            var result = await Api.PublishCutAsync(cut.Id);
+            Snackbar.Add(result?.PostId is null
+                ? $"Corte '{cut.Name}' publicado."
+                : $"Corte '{cut.Name}' publicado! ID: {result.PostId}", Severity.Success);
+        });
+    }
+
+    private async Task AssignChannel(Cut cut, long? channelId)
+    {
+        if (channelId is null || channelId == cut.PublishChannelId) return;
+
+        await Run(async () =>
+        {
+            await Api.AssignPublishChannelAsync(cut.Id, channelId.Value);
+            Snackbar.Add("Canal de publicação definido.", Severity.Success);
+        });
+    }
+
+    private async Task DeleteCut(Cut cut)
+    {
+        await Run(async () =>
+        {
+            await Api.DeleteCutAsync(cut.Id);
+            Snackbar.Add($"Corte '{cut.Name}' removido.", Severity.Success);
+        });
+    }
+
+    /// <summary>
+    /// Executa a ação, mostra o motivo real da falha e recarrega a lista —
+    /// recarregar é o que faz o status na tela refletir o que ficou no banco.
+    /// </summary>
+    private async Task Run(Func<Task> action)
+    {
+        try
+        {
+            isBusy = true;
+            error = "";
+            await action();
+        }
+        catch (ApiException ex)
+        {
+            error = ex.Message;
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            isBusy = false;
+            await Load();
+        }
+    }
+
+    private static string Duration(Cut cut)
+    {
+        var duration = cut.FinallyTime - cut.InitialTime;
+        return duration <= TimeSpan.Zero ? "—" : duration.ToString(@"mm\:ss");
+    }
+
+    private static Color GetStatusColor(CutStatusEnum status) => status switch
+    {
+        CutStatusEnum.Created => Color.Warning,
+        CutStatusEnum.Process => Color.Info,
+        CutStatusEnum.Edit => Color.Primary,
+        CutStatusEnum.Publish => Color.Success,
+        _ => Color.Default
+    };
+}

@@ -24,6 +24,12 @@ services:
       context: .
       dockerfile: YT.Generate.Cuts.App.WebAssembly/Dockerfile
 
+  yt.generate.cuts.worker.videoedition:
+    image: ${DOCKER_REGISTRY-}ytgeneratecutsworkervideoedition
+    build:
+      context: .
+      dockerfile: YT.Generate.Cuts.Worker.VideoEdition/Dockerfile
+
   yt.generate.cuts.worker.videopublish:
     image: ${DOCKER_REGISTRY-}ytgeneratecutsworkervideopublish
     build:

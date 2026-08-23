@@ -1,7 +1,77 @@
 ﻿@page "/"
+@using YT.Generate.Cuts.App.WebAssembly.Services
+@inject ApiService Api
 
-<PageTitle>Home</PageTitle>
+<PageTitle>YT Generate Cuts - Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<MudText Typo="Typo.h3" Class="mb-4">🎬 YT Generate Cuts</MudText>
+<MudText Typo="Typo.body1" Class="mb-6">Sistema de monitoramento, extração e publicação de cortes do YouTube</MudText>
 
-Welcome to your new app.
+<MudGrid>
+    <MudItem xs="12" sm="6" md="4" lg="3">
+        <MudCard Elevation="2" Class="rounded-lg" Style="height: 100%;">
+            <MudCardContent Class="d-flex flex-column align-center justify-center text-center py-6">
+                <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                <MudText Typo="Typo.h6">Canais Monitorados</MudText>
+                <MudText Typo="Typo.h2" Color="Color.Primary">@monitoringCount</MudText>
+            </MudCardContent>
+            <MudCardActions Class="justify-center pb-4">
+                <MudButton Href="/monitoring" Variant="Variant.Filled" Color="Color.Primary">Gerenciar</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4" lg="3">
+        <MudCard Elevation="2" Class="rounded-lg" Style="height: 100%;">
+            <MudCardContent Class="d-flex flex-column align-center justify-center text-center py-6">
+                <MudIcon Icon="@Icons.Material.Filled.Publish" Color="Color.Success" Size="Size.Large" Class="mb-2" />
+                <MudText Typo="Typo.h6">Canais de Publicação</MudText>
+                <MudText Typo="Typo.h2" Color="Color.Success">@publishCount</MudText>
+            </MudCardContent>
+            <MudCardActions Class="justify-center pb-4">
+                <MudButton Href="/publish" Variant="Variant.Filled" Color="Color.Success">Gerenciar</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4" lg="3">
+        <MudCard Elevation="2" Class="rounded-lg" Style="height: 100%;">
+            <MudCardContent Class="d-flex flex-column align-center justify-center text-center py-6">
+                <MudIcon Icon="@Icons.Material.Filled.Movie" Color="Color.Warning" Size="Size.Large" Class="mb-2" />
+                <MudText Typo="Typo.h6">Vídeos Baixados</MudText>
+                <MudText Typo="Typo.h2" Color="Color.Warning">@videoCount</MudText>
+            </MudCardContent>
+            <MudCardActions Class="justify-center pb-4">
+                <MudButton Href="/videos" Variant="Variant.Filled" Color="Color.Warning">Ver</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private int monitoringCount;
+    private int publishCount;
+    private int videoCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var channels = await Api.GetMonitoringChannelsAsync();
+            monitoringCount = channels.Count;
+        }
+        catch { }
+
+        try
+        {
+            var channels = await Api.GetPublishChannelsAsync();
+            publishCount = channels.Count;
+        }
+        catch { }
+
+        try
+        {
+            var videos = await Api.GetVideosAsync();
+            videoCount = videos.Count;
+        }
+        catch { }
+    }
+}

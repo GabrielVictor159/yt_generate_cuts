@@ -8,6 +8,8 @@ public static class DependencyInjectionExtension
     public static IServiceCollection AddServices(this IServiceCollection services)
     {
         services.AddScoped<ProcessInterestingTimesService>();
+        services.AddScoped<ProcessingCutsService>();
+        services.AddScoped<RemoveVideoCutCreatedService>();
         return services;
     }
 
@@ -23,6 +25,22 @@ public static class DependencyInjectionExtension
                 "extraction_interesting_times",
                 "processing",
                 s => s.ProcessInterestingTimesAsync(CancellationToken.None),
+                Cron.Minutely);
+
+            Infra.Data.DependencyInjectionExtension.ClearSpecificHangfireJobs(services, "processing_cuts");
+
+            manager.AddOrUpdate<ProcessingCutsService>(
+                "processing_cuts",
+                "processing",
+                s => s.ProcessCutsAsync(CancellationToken.None),
+                Cron.Minutely);
+
+            Infra.Data.DependencyInjectionExtension.ClearSpecificHangfireJobs(services, "processing_remove_videos");
+
+            manager.AddOrUpdate<RemoveVideoCutCreatedService>(
+                "processing_remove_videos",
+                "processing",
+                s => s.RemoveVideosAsync(CancellationToken.None),
                 Cron.Minutely);
         }
         catch { }

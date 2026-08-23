@@ -1,7 +1,6 @@
 ﻿using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using YT.Generate.Cuts.Application.Abstractions;
 
 namespace YT.Generate.Cuts.Application.VideoExtraction.Tests;
 public class TestsBase
@@ -23,7 +22,7 @@ public class TestsBase
         Connection = new SqliteConnection("DataSource=:memory:");
         Connection.Open();
 
-        services.AddApplication();
+        services.AddApplicationVideoExtraction();
 
         ServiceProvider = services.BuildServiceProvider();
 

@@ -1,0 +1,97 @@
+@page "/videos"
+@using YT.Generate.Cuts.App.WebAssembly.Services
+@using YT.Generate.Cuts.Domain.Entities
+@using YT.Generate.Cuts.Domain.Enums
+@inject ApiService Api
+
+<PageTitle>Vídeos</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">🎥 Vídeos</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">Vídeos baixados do YouTube e seu status de processamento</MudText>
+
+@if (isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    <MudText Align="Align.Center">Carregando...</MudText>
+}
+else
+{
+    <MudSelect T="string" @bind-Value="statusFilter" Label="Filtrar por status" AdornmentIcon="@Icons.Material.Filled.FilterList" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-4" @bind-Value:after="Load">
+        <MudSelectItem T="string" Value="null">Todos os status</MudSelectItem>
+        <MudSelectItem T="string" Value="@("Created")">Criado</MudSelectItem>
+        <MudSelectItem T="string" Value="@("Download")">Download</MudSelectItem>
+        <MudSelectItem T="string" Value="@("Process")">Processado</MudSelectItem>
+        <MudSelectItem T="string" Value="@("Removed")">Removido</MudSelectItem>
+    </MudSelect>
+
+    <MudTable Items="videos" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm" Loading="isLoading" Elevation="2" Class="rounded-lg">
+        <HeaderContent>
+            <MudTh>ID</MudTh>
+            <MudTh>Título</MudTh>
+            <MudTh>Canal</MudTh>
+            <MudTh>Idioma</MudTh>
+            <MudTh>Duração</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Criado em</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="ID">@context.Id</MudTd>
+            <MudTd DataLabel="Título">@context.Title</MudTd>
+            <MudTd DataLabel="Canal">@context.Channel?.Name</MudTd>
+            <MudTd DataLabel="Idioma">@(context.Language ?? "-")</MudTd>
+            <MudTd DataLabel="Duração">@(context.Duration?.ToString(@"hh\:mm\:ss") ?? "-")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)" Label="true">@context.Status</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Criado em">@context.CreationDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center" Class="pa-4">Nenhum vídeo encontrado.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    private List<Video> videos = new();
+    private bool isLoading = true;
+    private string? statusFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            isLoading = true;
+            VideoStatusEnum? status = statusFilter switch
+            {
+                "Created" => VideoStatusEnum.Created,
+                "Download" => VideoStatusEnum.Download,
+                "Process" => VideoStatusEnum.Process,
+                "Removed" => VideoStatusEnum.Removed,
+                _ => null
+            };
+            videos = await Api.GetVideosAsync(status);
+        }
+        catch
+        {
+            // Tratamento de erro
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Color GetStatusColor(VideoStatusEnum status) => status switch
+    {
+        VideoStatusEnum.Created => Color.Default,
+        VideoStatusEnum.Download => Color.Primary,
+        VideoStatusEnum.Process => Color.Success,
+        VideoStatusEnum.Removed => Color.Error,
+        _ => Color.Default
+    };
+}

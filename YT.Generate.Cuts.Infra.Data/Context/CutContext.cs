@@ -9,6 +9,15 @@ public class CutContext : DbContext
     {
     }
     public DbSet<Cut> Cuts { get; set; }
+
+    /// <summary>
+    /// Declarado explicitamente para a tabela nascer como "EditionConfigurations".
+    /// Sem o DbSet, o EF nomeia a tabela pelo tipo (singular) — e a migration
+    /// criaria "EditionConfigurations" enquanto o modelo esperaria
+    /// "EditionConfiguration". O diferenciador de modelo do EF acusa isso na
+    /// subida, mas o barato é não introduzir a divergência.
+    /// </summary>
+    public DbSet<EditionConfiguration> EditionConfigurations { get; set; }
     public DbSet<Monitoring> Monitorings { get; set; }
     public DbSet<MonitoringChannel> MonitoringChannels { get; set; }
     public DbSet<PublishChannel> publishChannels { get; set; }

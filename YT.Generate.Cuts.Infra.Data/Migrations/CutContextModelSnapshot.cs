@@ -56,6 +56,15 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SubtitleLanguage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Tags")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubtitlePath")
+                        .HasColumnType("text");
+
                     b.Property<long?>("VideoId")
                         .HasColumnType("bigint");
 
@@ -66,6 +75,35 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                     b.HasIndex("VideoId");
 
                     b.ToTable("Cuts");
+                });
+
+            modelBuilder.Entity("YT.Generate.Cuts.Domain.Entities.EditionConfiguration", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("BurnSubtitles")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("EditionConfigurations");
                 });
 
             modelBuilder.Entity("YT.Generate.Cuts.Domain.Entities.Monitoring", b =>
@@ -105,6 +143,21 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("MaxCutSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DefaultTags")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("EditionConfigurationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("MaxPendingCuts")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinCutSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -114,6 +167,8 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EditionConfigurationId");
 
                     b.ToTable("MonitoringChannels");
                 });
@@ -236,6 +291,21 @@ namespace YT.Generate.Cuts.Infra.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Channel");
+                });
+
+            modelBuilder.Entity("YT.Generate.Cuts.Domain.Entities.MonitoringChannel", b =>
+                {
+                    b.HasOne("YT.Generate.Cuts.Domain.Entities.EditionConfiguration", "EditionConfiguration")
+                        .WithMany("MonitoringChannels")
+                        .HasForeignKey("EditionConfigurationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("EditionConfiguration");
+                });
+
+            modelBuilder.Entity("YT.Generate.Cuts.Domain.Entities.EditionConfiguration", b =>
+                {
+                    b.Navigation("MonitoringChannels");
                 });
 
             modelBuilder.Entity("YT.Generate.Cuts.Domain.Entities.MonitoringChannel", b =>

@@ -36,17 +36,57 @@ public static class DependencyInjectionExtension
             }, new PostgreSqlStorageOptions
             {
                 PrepareSchemaIfNecessary = true,
-                SchemaName = schema 
+                SchemaName = schema,
+
+                // Tempo de vida dos locks internos do Hangfire. A exclusão
+                // mútua dos nossos jobs NÃO usa mais este mecanismo — ver
+                // PostgresAdvisoryJobLock e o motivo lá descrito.
+                DistributedLockTimeout = ReadTimeout(configuration, "Hangfire:DistributedLockTimeoutMinutes", 60),
+
+                // Enquanto o worker está vivo, ele renova a invisibilidade do
+                // job que está executando. Sem isto (o padrão é false), um job
+                // que passa de InvisibilityTimeout volta para a fila e é
+                // buscado por OUTRO worker enquanto o primeiro ainda trabalha:
+                // mais uma fonte de execução duplicada, independente de lock.
+                UseSlidingInvisibilityTimeout = true,
+
+                // Com a renovação ligada, este prazo passa a significar "quanto
+                // tempo depois de o worker morrer o job volta para a fila".
+                // Trinta minutos (o padrão) é o que fazia o sistema parecer
+                // travado depois de um Stop no Visual Studio; cinco é suficiente
+                // para não competir com um desligamento normal.
+                InvisibilityTimeout = ReadTimeout(configuration, "Hangfire:InvisibilityTimeoutMinutes", 5),
             }));
 
         services.AddHangfireServer(options =>
         {
             options.Queues = filas;
-            options.WorkerCount = 10;
+            options.WorkerCount = ReadInt(configuration, "Hangfire:WorkerCount", 10);
+
+            // Quanto tempo o watchdog espera antes de considerar um servidor
+            // morto e devolver os jobs dele. O padrão são 5 minutos; encurtar
+            // faz a recuperação depois de um encerramento abrupto ser rápida,
+            // que é o caso do ciclo de depuração no Visual Studio.
+            options.ServerTimeout = ReadTimeout(configuration, "Hangfire:ServerTimeoutMinutes", 2);
+            options.ServerCheckInterval = TimeSpan.FromMinutes(1);
         });
+
+        // Exclusão mútua entre execuções, válida entre processos e imune a
+        // encerramento abrupto: o advisory lock morre com a conexão.
+        services.AddSingleton<Jobs.IJobLock, Jobs.PostgresAdvisoryJobLock>();
+        services.AddSingleton<Jobs.SerialJobRunner>();
 
         return services;
     }
+
+    private static TimeSpan ReadTimeout(IConfiguration configuration, string key, int defaultMinutes)
+    {
+        var minutes = int.TryParse(configuration[key], out var value) && value > 0 ? value : defaultMinutes;
+        return TimeSpan.FromMinutes(minutes);
+    }
+
+    private static int ReadInt(IConfiguration configuration, string key, int fallback) =>
+        int.TryParse(configuration[key], out var value) && value > 0 ? value : fallback;
 
     public static void ApplyMigrations(this IApplicationBuilder app)
     {

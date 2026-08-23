@@ -18,25 +18,41 @@ services:
   yt.generate.cuts.worker.videoprocessing:
     environment:
       - DOTNET_ENVIRONMENT=Development
-      - OllamaUrl=http://ollama:11434
     env_file:
       - common.env
       - resources.env
     ports:
-      - "8384:8080" 
-    networks: 
+      - "8384:8080"
+    networks:
       - yt_generate_cuts
+    # Ollama roda no host Windows; host.docker.internal aponta o container para ele.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
       - ./downloads:/app/downloads
     depends_on:
-      db:
-        condition: service_started
-      ollama:
-        condition: service_started
-      ollama-pull-model:
-        condition: service_completed_successfully
+      - db
+
+  yt.generate.cuts.worker.videoedition:
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+    env_file:
+      - common.env
+      - resources.env
+    ports:
+      - "8387:8080"
+    networks:
+      - yt_generate_cuts
+    volumes:
+      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
+      # O mesmo volume dos outros workers: a edicao le o arquivo do corte e a
+      # legenda gerada na etapa anterior, e grava o editado no mesmo lugar.
+      - ./downloads:/app/downloads
+    depends_on:
+      - db
 
   yt.generate.cuts.worker.videopublish:
     environment:
@@ -60,10 +76,14 @@ services:
       - ASPNETCORE_HTTP_PORTS=8080
     env_file:
       - common.env
-    networks: 
+      - resources.env
+    networks:
       - yt_generate_cuts
     ports:
       - "8386:8080"
+    # A API tambem registra o cliente Ollama (AddOllama) e precisa alcancar o host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
@@ -71,6 +91,12 @@ services:
       - db
 
   yt.generate.cuts.app.webassembly:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
+      # Hoje os componentes renderizam no servidor, entao quem chama a API e o
+      # container: precisa do nome do servico, nao de localhost.
+      - ApiUrl=http://yt.generate.cuts.api:8080/
     ports:
       - "8387:8080"
     networks:
@@ -91,44 +117,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
   
-  ollama:
-    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
-    container_name: ollama
-    env_file:
-      - resources.env
-    ports:
-      - "11434:11434"
-    networks:
-      - yt_generate_cuts
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: ${GPU_DRIVER}
-              count: 1
-              capabilities: [gpu]
-              
-  ollama-pull-model:
-    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
-    container_name: ollama_puller
-    networks:
-      - yt_generate_cuts
-    volumes:
-      - ollama_data:/root/.ollama
-    env_file:
-      - resources.env
-    environment:
-      - OLLAMA_HOST=ollama
-    entrypoint: /bin/sh
-    command: -c "sleep 5 && ollama pull $$OLLAMA_MODEL"
-    depends_on:
-      - ollama
-
 volumes:
   postgres_data:
-  ollama_data:
 
 networks:
   yt_generate_cuts:

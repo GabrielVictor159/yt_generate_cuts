@@ -1,0 +1,447 @@
+﻿@page "/monitoring"
+@using MudBlazor
+@using YT.Generate.Cuts.App.WebAssembly.Services
+@using YT.Generate.Cuts.Domain.Entities
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Canais Monitorados</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">📡 Canais Monitorados</MudText>
+<MudText Typo="Typo.body2" Class="mb-4">Canais do YouTube que serão monitorados para novos vídeos</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+           OnClick="StartAdd" Disabled="isLoading" Class="mb-4">
+    Novo Canal
+</MudButton>
+
+@if (isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    <MudText Align="Align.Center">Carregando...</MudText>
+}
+else
+{
+    <MudTable Items="channels" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm" Elevation="2" Class="rounded-lg">
+        <HeaderContent>
+            <MudTh>ID</MudTh>
+            <MudTh>Nome</MudTh>
+            <MudTh>URL</MudTh>
+            <MudTh>Duração do corte</MudTh>
+            <MudTh>Cortes pendentes</MudTh>
+            <MudTh>Edição</MudTh>
+            <MudTh>Tags padrão</MudTh>
+            <MudTh>Criado em</MudTh>
+            <MudTh Style="text-align: right;">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="ID">@context.Id</MudTd>
+            <MudTd DataLabel="Nome">@context.Name</MudTd>
+            <MudTd DataLabel="URL">
+                <MudLink Href="@context.Url" Target="_blank">@context.Url</MudLink>
+            </MudTd>
+            <MudTd DataLabel="Duração do corte">
+                @if (context.MinCutSeconds is null && context.MaxCutSeconds is null)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">Padrão global</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Label="true">
+                        @(context.MinCutSeconds?.ToString() ?? "—")–@(context.MaxCutSeconds?.ToString() ?? "—")s
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Cortes pendentes">
+                @if (context.MaxPendingCuts is null)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">Padrão global</MudChip>
+                }
+                else if (context.MaxPendingCuts == 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Label="true">Sem limite</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Label="true">até @context.MaxPendingCuts</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Edição">
+                @{
+                    var perfil = editionProfiles.FirstOrDefault(p => p.Id == context.EditionConfigurationId);
+                }
+                @if (perfil is null)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">Padrão global</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Label="true">
+                        @perfil.Width×@perfil.Height@(perfil.BurnSubtitles ? " • legenda" : "")
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Tags padrão">
+                @if (string.IsNullOrWhiteSpace(context.DefaultTags))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption">@context.DefaultTags</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Criado em">@context.CreationDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Ações" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Info" Size="Size.Small"
+                               OnClick="() => Monitor(context.Id)" Disabled="isBusy" title="Monitorar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small"
+                               OnClick="() => StartEdit(context)" Disabled="isBusy" title="Editar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                               OnClick="() => Delete(context.Id)" Disabled="isBusy" title="Excluir" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center" Class="pa-4">Nenhum canal monitorado cadastrado.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4" ShowCloseIcon="true" CloseIconClicked="() => error = string.Empty">@error</MudAlert>
+}
+
+<MudDialog @bind-Visible="showModal" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(editingId > 0 ? "Editar Canal" : "Novo Canal")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" Spacing="3">
+            <MudTextField @bind-Value="editName"
+                          Label="Nome"
+                          Required="true"
+                          RequiredError="Nome é obrigatório"
+                          Immediate="true"
+                          Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="editUrl"
+                          Label="Canal do YouTube"
+                          HelperText="@UrlHelperText"
+                          Placeholder="@("@nomedocanal")"
+                          Required="true"
+                          RequiredError="O canal é obrigatório"
+                          Validation="@(new Func<string, string?>(ValidateChannelReference))"
+                          Immediate="true"
+                          Variant="Variant.Outlined" />
+
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2">Duração dos cortes deste canal</MudText>
+            <MudSwitch T="bool" @bind-Value="useGlobalCutDuration" Color="Color.Primary"
+                       Label="Usar o padrão global" />
+
+            @if (!useGlobalCutDuration)
+            {
+                <MudNumericField T="int?" @bind-Value="editMinCutSeconds"
+                                 Label="Mínimo (segundos)" Min="1" Max="600"
+                                 Variant="Variant.Outlined" Immediate="true" />
+                <MudNumericField T="int?" @bind-Value="editMaxCutSeconds"
+                                 Label="Máximo (segundos)" Min="2" Max="600"
+                                 HelperText="@CutDurationHelperText"
+                                 Variant="Variant.Outlined" Immediate="true" />
+            }
+
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2">Edição dos cortes deste canal</MudText>
+            <MudSelect T="long?" @bind-Value="editEditionConfigurationId" Label="Perfil de edição"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                <MudSelectItem T="long?" Value="@(null)">Padrão global</MudSelectItem>
+                @foreach (var profile in editionProfiles)
+                {
+                    <MudSelectItem T="long?" Value="@profile.Id">
+                        @profile.Name (@profile.Width×@profile.Height@(profile.BurnSubtitles ? ", com legenda" : ""))
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField T="string" @bind-Value="editDefaultTags" Label="Tags padrão"
+                          HelperText="Separadas por vírgula. Entram em todo corte deste canal, somadas às que o modelo extrair."
+                          Variant="Variant.Outlined" Immediate="true" Class="mb-2" />
+
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2">Teto de cortes pendentes deste canal</MudText>
+            <MudText Typo="Typo.caption" Class="mb-2">
+                Cortes ainda não publicados. Ao atingir o teto, o canal para de gerar cortes novos até que
+                os existentes sejam publicados ou removidos — é o freio para o caso de os cortes ficarem
+                sem canal de publicação definido.
+            </MudText>
+            <MudSwitch T="bool" @bind-Value="useGlobalMaxPendingCuts" Color="Color.Primary"
+                       Label="Usar o padrão global" />
+
+            @if (!useGlobalMaxPendingCuts)
+            {
+                <MudNumericField T="int?" @bind-Value="editMaxPendingCuts"
+                                 Label="Máximo de cortes pendentes" Min="0" Max="1000"
+                                 HelperText="0 = sem limite"
+                                 Variant="Variant.Outlined" Immediate="true" />
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseModal" Variant="Variant.Text" Disabled="isSaving">Cancelar</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="isSaving">
+            @if (isSaving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Salvando...</span>
+            }
+            else
+            {
+                <span>Salvar</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const string UrlHelperText =
+        "Use o handle (@nomedocanal), a URL do canal ou o ID (UC...).";
+
+    private List<MonitoringChannel> channels = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isDeleting;
+    private bool showModal;
+    private long editingId;
+    private string editName = "";
+    private string editUrl = "";
+    private int? editMinCutSeconds;
+    private int? editMaxCutSeconds;
+    private int? editMaxPendingCuts;
+    private long? editEditionConfigurationId;
+    private string editDefaultTags = "";
+    private List<EditionConfiguration> editionProfiles = new();
+    private bool useGlobalMaxPendingCuts = true;
+    private bool useGlobalCutDuration = true;
+    private string error = "";
+    private MudForm? form;
+
+    private string CutDurationHelperText =>
+        editMinCutSeconds is not null && editMaxCutSeconds is not null && editMaxCutSeconds <= editMinCutSeconds
+            ? "O máximo precisa ser maior que o mínimo."
+            : "Vale só para este canal. Deixe o padrão global para usar a configuração do sistema.";
+
+    private bool isBusy => isSaving || isDeleting;
+
+    private readonly DialogOptions dialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEditionProfiles();
+        await Load();
+    }
+
+    private async Task LoadEditionProfiles()
+    {
+        try
+        {
+            editionProfiles = await Api.GetEditionConfigurationsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Falhar aqui não pode impedir a listagem dos canais: sem os perfis
+            // a tela apenas não oferece a escolha.
+            error = $"Os perfis de edição não foram carregados: {ex.Message}";
+        }
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            isLoading = true;
+            error = "";
+            channels = await Api.GetMonitoringChannelsAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erro ao carregar os canais: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void StartAdd()
+    {
+        editingId = 0;
+        editName = "";
+        editUrl = "";
+        editMinCutSeconds = null;
+        editMaxCutSeconds = null;
+        editMaxPendingCuts = null;
+        useGlobalMaxPendingCuts = true;
+        editEditionConfigurationId = null;
+        editDefaultTags = "";
+        useGlobalCutDuration = true;
+        error = "";
+        showModal = true;
+    }
+
+    private void StartEdit(MonitoringChannel channel)
+    {
+        editingId = channel.Id;
+        editName = channel.Name;
+        editUrl = channel.Url;
+        editMinCutSeconds = channel.MinCutSeconds;
+        editMaxCutSeconds = channel.MaxCutSeconds;
+        useGlobalCutDuration = channel.MinCutSeconds is null && channel.MaxCutSeconds is null;
+        editMaxPendingCuts = channel.MaxPendingCuts;
+        useGlobalMaxPendingCuts = channel.MaxPendingCuts is null;
+        editEditionConfigurationId = channel.EditionConfigurationId;
+        editDefaultTags = channel.DefaultTags ?? "";
+        error = "";
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    /// <summary>
+    /// Espelha a validação da API (ChannelReferenceValidator): o handler do
+    /// monitoramento resolve o canal por handle, por ID ou por URL do YouTube.
+    /// </summary>
+    private string? ValidateChannelReference(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "O canal é obrigatório";
+
+        var reference = value.Trim();
+
+        if (reference.Contains('@'))
+            return null;
+
+        if (System.Text.RegularExpressions.Regex.IsMatch(reference, @"^UC[A-Za-z0-9_-]{22}$"))
+            return null;
+
+        if (Uri.TryCreate(reference, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            var host = uri.Host.ToLowerInvariant();
+            if (host is "youtube.com" or "www.youtube.com" or "m.youtube.com" or "youtu.be")
+                return null;
+        }
+
+        return UrlHelperText;
+    }
+
+    private async Task Save()
+    {
+        if (isSaving) return;
+
+        if (form is not null)
+        {
+            await form.Validate();
+            if (!form.IsValid) return;
+        }
+
+        var name = editName.Trim();
+        var url = editUrl.Trim();
+
+        var min = useGlobalCutDuration ? null : editMinCutSeconds;
+        var max = useGlobalCutDuration ? null : editMaxCutSeconds;
+        var maxPending = useGlobalMaxPendingCuts ? null : editMaxPendingCuts;
+
+        // String vazia (e não null) para a API entender "limpei as tags"; null
+        // ali significaria "não mexi".
+        var tags = editDefaultTags?.Trim() ?? "";
+
+        if (min is not null && max is not null && max <= min)
+        {
+            error = "A duração máxima do corte precisa ser maior que a mínima.";
+            Snackbar.Add(error, Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+            error = "";
+
+            if (editingId > 0)
+            {
+                await Api.UpdateMonitoringChannelAsync(
+                    editingId, name, url, min, max, clearCutDuration: useGlobalCutDuration,
+                    maxPendingCuts: maxPending, clearMaxPendingCuts: useGlobalMaxPendingCuts,
+                    editionConfigurationId: editEditionConfigurationId,
+                    clearEditionConfiguration: editEditionConfigurationId is null,
+                    defaultTags: tags);
+                Snackbar.Add("Canal atualizado com sucesso!", Severity.Success);
+            }
+            else
+            {
+                await Api.CreateMonitoringChannelAsync(name, url, min, max, maxPending,
+                    editionConfigurationId: editEditionConfigurationId, defaultTags: tags);
+                Snackbar.Add("Canal criado com sucesso!", Severity.Success);
+            }
+
+            showModal = false;
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erro ao salvar: {ex.Message}";
+            Snackbar.Add(error, Severity.Error);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task Delete(long id)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Tem certeza que deseja excluir este canal?");
+        if (!confirmed) return;
+
+        try
+        {
+            isDeleting = true;
+            error = "";
+            await Api.DeleteMonitoringChannelAsync(id);
+            Snackbar.Add("Canal excluído com sucesso!", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erro ao excluir: {ex.Message}";
+            Snackbar.Add(error, Severity.Error);
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private async Task Monitor(long id)
+    {
+        try
+        {
+            isDeleting = true;
+            error = "";
+            Snackbar.Add("Monitoramento solicitado. Isso pode levar alguns minutos.", Severity.Info);
+            await Api.TriggerMonitoringAsync(id);
+            Snackbar.Add("Monitoramento concluído!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            error = $"Erro ao monitorar: {ex.Message}";
+            Snackbar.Add(error, Severity.Error);
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+}

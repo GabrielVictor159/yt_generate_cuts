@@ -361,3 +361,22 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# ---------------------------------------------------------------------------
+# Area de trabalho do assistente (Claude) — nada aqui faz parte do projeto
+# ---------------------------------------------------------------------------
+# Estes diretorios e arquivos existem por causa de como as alteracoes chegaram
+# ate este repositorio: o codigo foi editado num ambiente remoto e transferido
+# para ca em pacotes .tgz. Sao entulho do transporte, nao logica do sistema.
+#
+#   _tmpstage/  pacote .tgz recebido + a extracao temporaria dele
+#   _to_delete/ arquivos removidos do projeto, guardados aqui porque a ponte de
+#               arquivos nao tinha permissao de exclusao (ex.: testes obsoletos,
+#               o GlobalJobLock antigo, rascunhos)
+#   *.diff      diffs gerados para revisao das alteracoes de cada etapa
+#
+# Podem ser apagados a qualquer momento.
+_tmpstage/
+_to_delete/
+*.diff
+devcontainer-docker-compose.yml.new
+/_tmpstage
